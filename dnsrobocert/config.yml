@@ -1,0 +1,15 @@
+draft: false
+acme:
+  email_account: <your email>
+  staging: false
+profiles:
+- name: cloudflare_profile
+  provider: cloudflare
+  provider_options:
+    auth_username: <your cloudflasre email>
+    auth_token: <your cloudflasre auth token>
+    zone_id : <your cloudflasre zone id of the domain>
+certificates:
+- domains:
+  - your-domain.com
+  profile: cloudflare_profile

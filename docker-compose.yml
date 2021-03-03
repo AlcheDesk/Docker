@@ -1,0 +1,150 @@
+version: '3.5'
+services:
+    # lesencrypt SSL certbot
+    dnsrobocert:
+        image: adferrand/dnsrobocert
+        container_name: dnsrobocert
+        volumes:
+            - ./cert/letsencrypt:/etc/letsencrypt
+            - ./dnsrobocert:/etc/dnsrobocert
+        restart: always
+    # nginx server
+    web:
+        image: nginx:stable
+        restart: always
+        container_name: web
+        volumes:
+            - /etc/localtime:/etc/localtime:ro
+            - "./web/config/site.conf:/etc/nginx/conf.d/default.conf"
+            - "./web/www:/var/www/html"
+            - "./web/log:/var/log/nginx"
+            - ./cert/letsencrypt:/etc/nginx/certs
+            - ./web/conf.d/ssl-dhparams.pem:/etc/nginx/conf.d/ssl-dhparams.pem
+        ports:
+            - "80:80"
+            - "443:443"
+        environment:
+            - NGINX_HOST=${NGINX_HOST}
+        tty: true
+        depends_on:
+            - letsencrypt
+            - php
+            - web-db
+            - atm-app
+            - ems-app
+    # PHP server
+    php:
+        image: scottfu/php-fpm-ubuntu
+        restart: always
+        container_name: php
+        volumes:
+            - /etc/localtime:/etc/localtime:ro
+            - "./web/www:/var/www/html"
+        tty: true
+    # database for web UI
+    web-db:
+        image: mariadb:10
+        restart: always
+        container_name: web-db
+        env_file:
+            - ".env"
+        environment:
+            - MYSQL_DATABASE=${MYSQL_DATABASE}
+            - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+            - MYSQL_USER=${MYSQL_USER}
+            - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+        ports:
+            - "3306:3306"
+        volumes:
+            - "/etc/timezone:/etc/timezone:ro"
+            - "./web/data/db:/var/lib/mysql"
+    # ATM application
+    atm-app:
+        image: scottfu/spring-java-ubuntu
+        container_name: atm-app
+        restart: always
+        ports:
+            - "8080:8080"
+        environment:
+            - TZ=Asia/Hong_Kong
+            - JAR_NAME=ATM_API.jar
+            - JAVA_OPTIONS=-Dfile.encoding=UTF-8
+        volumes:
+            - /etc/localtime:/etc/localtime:ro
+            - "./atm/app:/app"
+        stdin_open: true
+        tty: true
+        depends_on:
+            - atm-db
+            - samba
+    # ATM database
+    atm-db:
+        image: postgres:10
+        container_name: atm-db
+        restart: always
+        env_file:
+            - ".env"
+        ports:
+            - "5432:5432"
+        environment:
+            - POSTGRES_PASSWORD=${ATM_POSTGRES_PASSWORD}
+            - POSTGRES_USER=${ATM_POSTGRES_USER}
+            - POSTGRES_DB=${ATM_POSTGRES_DB}
+        volumes:
+            - "/etc/timezone:/etc/timezone:ro"
+            - "./atm/data/db:/var/lib/postgresql/data"
+    # EMS application
+    ems-app:
+        image: scottfu/spring-java-ubuntu
+        container_name: ems-app
+        restart: always
+        ports:
+             - "8090:8090"
+        environment:
+            - TZ=Asia/Hong_Kong
+            - JAR_NAME=EMS_API.jar
+            - JAVA_OPTIONS=-Dfile.encoding=UTF-8
+        volumes:
+            - /etc/localtime:/etc/localtime:ro
+            - "./ems/app:/app"
+        stdin_open: true
+        tty: true
+        depends_on:
+            - ems-db
+    # EMS database
+    ems-db:
+        image: postgres:10
+        container_name: ems-db
+        restart: always
+        env_file:
+            - ".env"
+        ports:
+            - "5433:5432"
+        environment:
+            - POSTGRES_PASSWORD=${EMS_POSTGRES_PASSWORD}
+            - POSTGRES_USER=${EMS_POSTGRES_USER}
+            - POSTGRES_DB=${EMS_POSTGRES_DB}
+        volumes:
+            - "/etc/timezone:/etc/timezone:ro"
+            - "./ems/data/db:/var/lib/postgresql/data"
+    # SAMBA server
+    samba:
+        image: dperson/samba
+        container_name: samba
+        restart: always
+        environment:
+            - TZ=Asia/Hong_Kong
+            - SMB=SMB1
+        volumes:
+            - "./:/all"
+            - "./atm:/atm"
+            - "./ems:/ems"
+            - "./php:/php"
+            - "./web:/web"
+            - "./redis:/redis"
+            - "./samba/result:/result"
+            - "./samba/upload:/upload"
+        command: -r -u tester;<your tester password> -u admin;<your admin password> -s result;/result;yes;yes;no;tester,admin;admin;admin -s all;/all;yes;no;no;admin;admin;admin -s atm;/atm;yes;no;no;admin;admin;admin -s ems;/ems;yes;no;no;admin;admin;admin -s php;/php;yes;no;no;admin;admin;admin -s web;/web;yes;no;no;admin;admin;admin -s redis;/redis;yes;no;no;admin;admin;admin
+        ports:
+            - "139:139"
+            - "445:445"
